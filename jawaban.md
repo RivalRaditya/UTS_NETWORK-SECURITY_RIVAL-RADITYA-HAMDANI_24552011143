@@ -13,6 +13,9 @@
 
 Membangun tiga custom image (`uts-openssl`, `uts-kali-tools`, `uts-dnsmasq`) dan menarik base image yang dibutuhkan (`alpine`, `nginx:alpine`, `vulnerables/web-dvwa`, `kalilinux/kali-rolling`). Seluruh build selesai (`FINISHED`) dan seluruh pull berstatus `Pull complete` / `Already exists` / `Image is up to date`, sehingga environment siap dipakai untuk 7 tugas berikutnya.
 
+![Build image uts-openssl, uts-kali-tools, uts-dnsmasq](images/00-persiapan-1.jpg)
+![Pull base image alpine, nginx, dvwa, kali-rolling](images/00-persiapan-2.jpg)
+
 ---
 
 ## Tugas 1 (Pertemuan 1): Docker dan Volume
@@ -45,6 +48,9 @@ PS C:\Perkuliahan\UTS-Network-Security\01-sumber-lab> docker compose -p k8 -f b/
  Network k8_lab          Removed
 ```
 
+![Tugas 1 - foto 1: volume persisten dan akses nginx dari attacker](images/tugas1-foto1.jpg)
+![Tugas 1 - foto 2: isi halaman nginx lengkap dan cleanup](images/tugas1-foto2.jpg)
+
 **Analisis:** Volume `vol-k8` bersifat persisten — meskipun container `w-k8` yang menulis file sudah dihapus (`docker rm w-k8`), container baru yang me-mount volume yang sama (`vol-k8:/data`) tetap bisa membaca isi `laporan-k8.txt` berisi NIM saya (`24552011143`). Ini membuktikan data pada Docker volume tidak ikut hilang saat container dihapus, berbeda dengan filesystem bawaan container yang bersifat ephemeral. Pada bagian kedua, dua container (`target` dan `attacker`) dijalankan dalam satu jaringan bridge lewat Docker Compose, dan `attacker` berhasil mengakses halaman default nginx milik `target` menggunakan nama service (`http://target`), membuktikan DNS resolution internal antar-container pada jaringan bridge berjalan normal.
 
 ---
@@ -62,6 +68,9 @@ issuer=CN=k8.uts.local
 notBefore=Nov 23 05:29:28 2026 GMT
 notAfter=Dec 23 05:29:28 2026 GMT
 ```
+
+![Tugas 2 - foto 1: pembuatan sertifikat X.509 self-signed](images/tugas2-foto1.jpg)
+![Tugas 2 - foto 2: enkripsi/dekripsi AES-256 dan hash SHA-256](images/tugas2-foto2.jpg)
 
 **Analisis:** Hash SHA-256 dari file asli (`laporan-k8.txt`) dan file hasil dekripsi (`hasil-k8.txt`) **identik**, membuktikan proses enkripsi AES-256-CBC (dengan key derivation PBKDF2) dan dekripsinya berjalan lossless — tidak ada data yang rusak atau berubah selama proses enc/dec dengan passphrase `kunci-k8-2026`. Pada pembuatan sertifikat X.509 self-signed, `subject` dan `issuer` sama-sama `CN=k8.uts.local` karena sertifikat ini self-signed (ditandatangani oleh key-nya sendiri, bukan oleh CA pihak ketiga), dengan masa berlaku 30 hari sesuai opsi `-days 30`.
 
@@ -98,6 +107,10 @@ gateway-k8.lab-arp-k8 (172.19.0.3) at 6e:0b:f4:30:48:e6 [ether] PERM on eth0
 penyerang-k8.lab-arp-k8 (172.19.0.4) at 7e:cc:05:43:ec:3f [ether] on eth0
 ```
 
+![Tugas 3 - foto 1: pembuatan network dan 3 container (korban, gateway, penyerang)](images/tugas3-foto1.jpg)
+![Tugas 3 - foto 2: inspeksi IP address korban dan gateway](images/tugas3-foto2.jpg)
+![Tugas 3 - foto 3: tabel ARP sebelum, saat spoofing, dan setelah mitigasi static ARP](images/tugas3-foto3.jpg)
+
 **Analisis:** Sebelum spoofing, korban dapat melakukan ping normal ke gateway. Setelah `arpspoof` dijalankan dari `penyerang-k8`, tabel ARP korban menunjukkan MAC address gateway (`172.19.0.3`) **berubah menjadi sama persis** dengan MAC address penyerang (`7e:cc:05:43:ec:3f`) — ini bukti nyata serangan ARP spoofing berhasil: korban kini mengira penyerang adalah gateway, sehingga seluruh trafik korban ke gateway akan melewati penyerang terlebih dahulu (man-in-the-middle). Sebagai mitigasi, entri ARP gateway dibuat statis (`arp -s`) dengan MAC address gateway yang asli. Setelah mitigasi, tabel ARP menunjukkan MAC gateway kembali ke nilai asli (`6e:0b:f4:30:48:e6`) dan ditandai `PERM`, artinya entri tidak lagi bisa ditimpa oleh paket ARP palsu dari penyerang.
 
 ---
@@ -130,6 +143,9 @@ Aircrack-ng 1.7
 
 > Catatan: nama file capture pada screenshot tertulis `handshake-k7-replacement.cap` (bukan `k8`) — kemungkinan sisa penamaan dari percobaan sebelumnya, namun isi file dan hasil pengujiannya tetap valid untuk kasus ini karena menggunakan sample bawaan aircrack-ng (`wpa.cap`) dan `wordlist-k8.txt` milik Kasus 8.
 
+![Tugas 4 - foto 1: download sample handshake dan mulai aircrack-ng](images/tugas4-foto1.jpg)
+![Tugas 4 - foto 2: hasil akhir KEY NOT FOUND](images/tugas4-foto2.jpg)
+
 **Analisis empat langkah WPA2 4-way handshake:** (1) AP mengirim **ANonce** (nonce acak dari Access Point) ke klien; (2) klien membuat **SNonce** miliknya sendiri, menghitung PTK (Pairwise Transient Key) dari PMK + ANonce + SNonce + MAC kedua pihak, lalu mengirim SNonce beserta MIC ke AP; (3) AP yang sudah punya PTK yang sama mengirim GTK (Group Temporal Key) terenkripsi beserta MIC ke klien; (4) klien mengonfirmasi dengan ACK. Karena hanya 1 handshake (bukan 4 paket lengkap EAPOL) yang berhasil ditangkap pada file capture dan wordlist hanya berisi 20 kandidat kata sandi, hasil pengujian `aircrack-ng` adalah **KEY NOT FOUND** — artinya tidak satu pun dari 20 kata sandi di `wordlist-k8.txt` yang cocok dengan PSK (Pre-Shared Key) jaringan `test` tersebut.
 
 ---
@@ -142,6 +158,8 @@ Mengirim: IP / ICMP 172.19.0.5 > 172.19.0.2 echo-request 0
 TTL balasan: 64
 Tipe ICMP balasan: 0
 ```
+
+![Tugas 5 - foto 1: pengiriman ICMP echo-request dengan Scapy dan balasannya](images/tugas5-foto1.jpg)
 
 **Analisis:** Script Scapy berhasil mengirim paket ICMP **echo-request** (tipe 8) ke korban (`172.19.0.2`) dan menerima balasan dengan **TTL = 64** (nilai default TTL pada container berbasis Linux/Alpine yang belum dilewatkan router mana pun, sehingga tidak berkurang) dan **tipe ICMP balasan = 0**, yaitu **echo-reply**, menandakan host tujuan hidup dan merespons normal. **Smurf attack** memanfaatkan mekanisme ICMP echo-request/reply ini dengan cara: penyerang mengirim ICMP echo-request ke **alamat broadcast** suatu jaringan dengan **source IP address dipalsukan (spoofed)** menjadi alamat IP korban; seluruh host dalam jaringan broadcast tersebut akan membalas echo-reply **serentak ke korban**, membanjiri korban dengan trafik balasan yang jauh lebih besar daripada paket yang dikirim penyerang (amplification attack), sehingga menyebabkan denial of service pada korban.
 
@@ -180,6 +198,13 @@ PS C:\Perkuliahan\UTS-Network-Security\01-sumber-lab> docker compose -p k8 -f b/
  Container k8-attacker-1 Removed
  Network k8_lab          Removed
 ```
+
+![Tugas 6 - foto 1: up compose dan percobaan exec bash (gagal, image tidak punya bash)](images/tugas6-foto1.jpg)
+![Tugas 6 - foto 2: menjalankan hping3 SYN flood di background](images/tugas6-foto2.jpg)
+![Tugas 6 - foto 3: hasil netstat SYN_RECV lewat shell sh](images/tugas6-foto3.jpg)
+![Tugas 6 - foto 4: perintah tcpdump bersamaan dengan curl](images/tugas6-foto4.jpg)
+![Tugas 6 - foto 4b: hasil tangkapan tcpdump pola SYN/SYN-ACK/RST](images/tugas6-foto4b.jpg)
+![Tugas 6 - foto 5: cleanup docker compose down -v](images/tugas6-foto5.jpg)
 
 **Analisis:** Target sempat tercatat memiliki **1 koneksi berstatus SYN_RECV** (koneksi TCP yang baru menerima SYN dan sudah membalas SYN-ACK, tetapi belum menerima ACK terakhir dari klien — ini persis kondisi yang dieksploitasi SYN flood, karena jika koneksi setengah-terbuka seperti ini menumpuk dalam jumlah besar, kuota backlog koneksi target akan penuh dan klien sah tidak bisa terhubung). Pada tangkapan `tcpdump`, terlihat jelas pola **SYN → SYN-ACK → RST** berulang dengan cepat pada port sumber yang berbeda-beda (49074, 49075, 49076, dst) dari IP attacker yang sama — ini adalah ciri khas trafik `hping3 --flood`: setiap paket SYN dibalas target dengan SYN-ACK (paket `[S.]`), namun karena `hping3` membuat paket mentah (raw socket) yang tidak terdaftar di stack TCP milik OS attacker, maka OS attacker otomatis membalas dengan **RST (`[R]`)** begitu menerima SYN-ACK yang "tidak dikenalnya" — sehingga handshake tidak pernah benar-benar selesai (3-way handshake normal seharusnya berakhir dengan ACK, bukan RST).
 
@@ -220,6 +245,12 @@ PS C:\Perkuliahan\UTS-Network-Security\01-sumber-lab> wsl
 ipal@RivalRaditya:/mnt/c/Perkuliahan/UTS-Network-Security/01-sumber-lab$ echo 3234353532303131313433 | xxd -r -p
 24552011143
 ```
+
+![Tugas 7 - foto 1: up docker compose DNS exfiltration](images/tugas7-foto1.jpg)
+![Tugas 7 - foto 2: encode NIM menjadi hex via WSL](images/tugas7-foto2.jpg)
+![Tugas 7 - foto 3: query dig ke domain hex dan isi log dnsmasq](images/tugas7-foto3.jpg)
+![Tugas 7 - foto 4: hasil analisis_dns.py dan decode hex kembali ke NIM](images/tugas7-foto4.jpg)
+![Tugas 7 - foto 5: cleanup docker compose down -v](images/tugas7-foto5.jpg)
 
 **Analisis:** NIM saya (`24552011143`) diubah menjadi representasi hex (`3234353532303131313433`) lalu disisipkan sebagai **label subdomain** pada query DNS ke `k8.exfil.lab` — inilah inti teknik **DNS exfiltration**: data yang ingin dicuri/dikeluarkan disamarkan sebagai bagian dari nama domain yang di-query, sehingga bisa menembus firewall yang biasanya mengizinkan lalu lintas DNS (port 53) secara bebas. Log `dnsmasq` membuktikan query hex tersebut benar-benar diterima oleh server DNS dari `172.20.0.2` (attacker), dan hasil analisis `analisis_dns.py` mengonfirmasi domain induk `exfil.lab` menerima 1 query. Kolom "Query mencurigakan" pada skrip tetap kosong karena skrip hanya menandai label hex yang **lebih panjang dari 30 karakter** (`BATAS_PANJANG_LABEL = 30`), sedangkan label NIM saya hanya 22 karakter — jadi kosongnya bagian ini **bukan error**, melainkan karena ambang batas deteksi skrip memang tidak terlampaui. Terakhir, label hex berhasil di-*decode* kembali menjadi `24552011143`, membuktikan data NIM dapat direkonstruksi utuh dari query DNS yang tercatat di log — inilah yang menjadi bukti keberhasilan simulasi exfiltration sekaligus deteksinya.
 
